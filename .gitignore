@@ -39,5 +39,10 @@
 
 # debug information files
 *.dwo
+<<<<<<< HEAD
 /out/build/x64-Debug
 /.vs
+=======
+/.vs
+/out/build/x64-Debug
+>>>>>>> baea6dd (initial)
