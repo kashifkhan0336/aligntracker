@@ -12,7 +12,8 @@ FetchContent_Declare(
 
 FetchContent_MakeAvailable(glfw3 imgui)
 find_package(OpenGL REQUIRED)
-set(ROOT ${imgui_SOURCE_DIR}) 
+set(ROOT ${imgui_SOURCE_DIR})
+
 add_library(glad gl.c)
 add_library(imgui STATIC
 	${ROOT}/imgui.cpp

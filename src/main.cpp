@@ -11,6 +11,12 @@
 #include <Windows.h>
 #include <thread>
 
+//Shell_notifyicon
+constexpr UINT WM_MY_NOTIFYICON = WM_APP + 1;
+const UINT MY_ICON_ID = 100;
+NOTIFYICONDATA nid = {};
+WNDPROC original_wndproc;
+
 std::atomic<bool> isNotificationShown(true);
 
 void CALLBACK TimerProc(HWND hwnd, UINT uMsg, UINT idEvent, DWORD dwTime) {
@@ -40,6 +46,35 @@ void timerFunc() {
     }
     std::cout << "Thread over" << "\n";
 }
+
+
+//Custom wndproc of main_window for shell_notifyicon
+LRESULT CALLBACK MainWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
+    switch (uMsg) {
+    case WM_CLOSE:
+        ShowWindow(hwnd, SW_HIDE); // Hide the window
+        return 0; // Handled the message, do not close the window
+    case WM_SYSCOMMAND:
+        if ((wParam & 0xFFF0) == SC_MINIMIZE) {
+            
+            ShowWindow(hwnd, SW_HIDE);
+            return 0;
+        }
+        break;
+    case WM_MY_NOTIFYICON:
+        switch (LOWORD(lParam)) {
+        case WM_LBUTTONDBLCLK: // Double-click event
+            ShowWindow(hwnd, SW_SHOW); // Restore the window
+            // Optional: remove the tray icon when window is visible
+            // Shell_NotifyIcon(NIM_DELETE, &nid); 
+            break;
+        }
+    }
+    //pass control back to glfw wndProc
+    return CallWindowProc(original_wndproc, hwnd, uMsg, wParam, lParam);
+}
+
+
 
 int main()
 {
@@ -80,6 +115,26 @@ int main()
         std::cout << "Dashboard window creation failed!";
     }
 
+    //get main_window hwnd for shell_notifyicon
+    HWND main_window_hwnd = glfwGetWin32Window(main_window);
+    original_wndproc = (WNDPROC)GetWindowLongPtr(main_window_hwnd, GWLP_WNDPROC);
+    HINSTANCE hInstance = (HINSTANCE)GetWindowLongPtr(main_window_hwnd, GWLP_HINSTANCE);
+    SetWindowLongPtr(main_window_hwnd, GWLP_WNDPROC, (LONG_PTR)MainWindowProc);
+
+    //NOTIFYICONDATA
+    nid.cbSize = sizeof(NOTIFYICONDATA);
+    nid.hWnd = main_window_hwnd;
+    nid.uID = MY_ICON_ID;
+    nid.uFlags = NIF_ICON | NIF_TIP | NIF_MESSAGE | NIF_SHOWTIP;
+    nid.uCallbackMessage = WM_MY_NOTIFYICON;
+    nid.hIcon = LoadIcon(NULL, IDI_APPLICATION);
+    //lstrcpyn(nid.szTip, TEXT("MY C++ Tray"), ARRAYSIZE(nid.szTip));
+    strcpy(nid.szTip, "Dashboard");
+    
+    Shell_NotifyIcon(NIM_ADD, &nid);
+    //(NIM_DELETE, &nid);
+    nid.uVersion = NOTIFYICON_VERSION_4;
+    Shell_NotifyIcon(NIM_SETVERSION, &nid);
 #pragma region Win32
     glfwWindowHint(GLFW_RESIZABLE, 0);
     glfwWindowHint(GLFW_DECORATED, 0);
@@ -276,7 +331,7 @@ int main()
         // Keep running
     }
     glfwDestroyWindow(main_window);
-
+    Shell_NotifyIcon(NIM_DELETE, &nid);
     glfwTerminate();
     exit(EXIT_SUCCESS);
 }
