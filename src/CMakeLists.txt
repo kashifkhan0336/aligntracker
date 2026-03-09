@@ -9,8 +9,15 @@ FetchContent_Declare(
     imgui
     GIT_REPOSITORY https://github.com/ocornut/imgui.git
 )
+include(FetchContent)
 
-FetchContent_MakeAvailable(glfw3 imgui)
+# You can configure this for your need, presumbably you want speificy a git tag here instead of a branch
+FetchContent_Declare(sqliteOrm
+  GIT_REPOSITORY https://github.com/fnc12/sqlite_orm
+  GIT_TAG        v1.9.1
+)
+
+FetchContent_MakeAvailable(glfw3 imgui sqliteOrm)
 find_package(OpenGL REQUIRED)
 set(ROOT ${imgui_SOURCE_DIR})
 
@@ -49,6 +56,7 @@ foreach(BACKEND glfw opengl3)
 	    $<INSTALL_INTERFACE:include>)
 
 endforeach()
+
 target_link_libraries(imgui_impl_glfw PRIVATE glfw)
 target_sources(imgui_impl_opengl3 PRIVATE ${ROOT}/backends/imgui_impl_opengl3_loader.h)
 target_link_libraries(imgui_impl_opengl3 PRIVATE OpenGL::GL)
@@ -59,4 +67,5 @@ target_include_directories(imgui PUBLIC ${ROOT}/backends)
 target_include_directories(glad PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
 add_executable(main main.cpp)
-target_link_libraries(main glfw glad imgui imgui_impl_glfw imgui_impl_opengl3)
+target_link_libraries(main glfw glad imgui imgui_impl_glfw imgui_impl_opengl3 sqlite3_lib sqlite_orm::sqlite_orm)
+target_include_directories(main PRIVATE ${CMAKE_SOURCE_DIR}/vendor/sqlite/)

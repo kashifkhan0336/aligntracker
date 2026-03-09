@@ -104,7 +104,6 @@ void main() {
 	reminder2.id = reminder2Id;
 
 	auto pending_alarms = storage.get_all<Reminder>(where(c(&Reminder::status) == "pending"));
-	std::cout << pending_alarms.size() << std::endl;
 	for (auto& alarm : pending_alarms) {
 		std::cout << alarm.time << "," << alarm.status << std::endl;
 		std::tm tm{};

@@ -6,10 +6,18 @@
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_opengl3.h"
 #include <GLFW/glfw3.h>
-#define GLFW_EXPOSE_NATIVE_WIN32
+#define GLFW_EXPOSE_NATIVE_WIN32    
 #include <GLFW/glfw3native.h>
 #include <Windows.h>
 #include <thread>
+#include <chrono>
+#include <sqlite_orm/sqlite_orm.h>
+#include <queue>
+
+//namespaces
+using namespace std::chrono;
+using namespace std::chrono_literals;
+using namespace sqlite_orm;
 
 //Shell_notifyicon
 constexpr UINT WM_MY_NOTIFYICON = WM_APP + 1;
@@ -17,13 +25,50 @@ const UINT MY_ICON_ID = 100;
 NOTIFYICONDATA nid = {};
 WNDPROC original_wndproc;
 
+//state
+struct Time {
+    int id;
+    time_point<local_t, system_clock::duration> time;
+};
+std::queue<Time> times;
+struct Reminder {
+    int id;
+    std::string time;
+    std::string status = "pending";
+};
+auto storage = make_storage("data.db", make_table("reminders",
+    make_column("id", &Reminder::id, primary_key().autoincrement()),
+    make_column("time", &Reminder::time),
+    make_column("status", &Reminder::status, default_value("pending"))
+));
+
+//retrive and merge pending alarms to reminders queue
+void getAlarms() {
+    auto pending_alarms = storage.get_all<Reminder>(where(c(&Reminder::status) == "pending"));
+    for (auto& alarm : pending_alarms) {
+        std::cout << alarm.time << "," << alarm.status << std::endl;
+        std::tm tm{};
+        std::stringstream ss(alarm.time);
+        ss >> std::get_time(&tm, "%Y-%m-%d %H:%M:%S");
+        auto tp = system_clock::from_time_t(std::mktime(&tm));
+        auto local_time = zoned_time{ current_zone(), tp };
+        times.push(Time{ alarm.id, local_time.get_local_time() });
+        std::cout << local_time << std::endl;
+    }
+}
 std::atomic<bool> isNotificationShown(true);
 
 void CALLBACK TimerProc(HWND hwnd, UINT uMsg, UINT idEvent, DWORD dwTime) {
-
-    isNotificationShown = !isNotificationShown;
-
-    std::cout << isNotificationShown << "Time up!\n";
+    auto local_zone_time = zoned_time{ current_zone(), system_clock::now() };
+    if (!times.empty()) {
+        auto duration = duration_cast<seconds>(times.front().time - local_zone_time.get_local_time());
+        std::cout << duration;
+        if (duration < 5s && duration < 3s) {
+            std::cout << "Time for alarm" << "\n";
+            storage.update_all(set(c(&Reminder::status) = "done"), where(c(&Reminder::id) == times.front().id));
+            times.pop();
+        }
+    }
 }
 static void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods)
 {
@@ -35,7 +80,7 @@ static void key_callback(GLFWwindow* window, int key, int scancode, int action, 
 void timerFunc() {
 
     std::cout << "Timer Thread started\n";
-    SetTimer(NULL, 0, 3000, (TIMERPROC)TimerProc);
+    SetTimer(NULL, 0, 1000, (TIMERPROC)TimerProc);
     MSG msg;
     // Main message loop
     while (GetMessage(&msg, NULL, 0, 0)) {
@@ -46,7 +91,10 @@ void timerFunc() {
     }
     std::cout << "Thread over" << "\n";
 }
-
+const UINT IDI_EXIT = 421;
+const UINT IDI_TEA = 422;
+const UINT IDI_LUNCH = 423;
+const UINT IDI_DINNER = 424;
 
 //Custom wndproc of main_window for shell_notifyicon
 LRESULT CALLBACK MainWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
@@ -63,6 +111,42 @@ LRESULT CALLBACK MainWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPar
         break;
     case WM_MY_NOTIFYICON:
         switch (LOWORD(lParam)) {
+        case WM_RBUTTONUP: //right click
+        case WM_CONTEXTMENU: //context menu
+            POINT pt;
+            GetCursorPos(&pt);
+            {
+                HMENU hMenu = CreatePopupMenu();
+                AppendMenu(hMenu, MF_STRING, IDI_EXIT, "Exit");
+                AppendMenu(hMenu, MF_STRING, IDI_TEA, "Tea");
+                AppendMenu(hMenu, MF_STRING, IDI_LUNCH, "Lunch");
+                AppendMenu(hMenu, MF_STRING, IDI_DINNER, "Dinner");
+                UINT item = TrackPopupMenu(hMenu, TPM_RETURNCMD | TPM_NONOTIFY | TPM_LEFTBUTTON, pt.x, pt.y, 0, hwnd, NULL); //this will block
+                std::cout << "item -> " << item << std::endl;
+                switch (item)
+                {
+                case IDI_TEA:
+                {
+                    auto local_zone_time = zoned_time{ current_zone(), system_clock::now() };
+                    auto t2 = local_zone_time.get_local_time() + 2min;
+                    Reminder reminder{ -1, std::vformat("{:%Y-%m-%d %H:%M:%S}", std::make_format_args(t2)) };
+                    auto reminder1Id = storage.insert(reminder);
+                    getAlarms();
+                    std::cout << reminder1Id << std::endl;
+                }
+
+                    break;
+                case IDI_LUNCH:
+                    break;
+                case IDI_DINNER:
+                    break;
+                default:
+                    break;
+                }
+                return 0;
+                
+            }
+            
         case WM_LBUTTONDBLCLK: // Double-click event
             ShowWindow(hwnd, SW_SHOW); // Restore the window
             // Optional: remove the tray icon when window is visible
@@ -83,7 +167,8 @@ int main()
     GLFWwindow* notification_window;
     int notification_window_width = 600;
     int notification_window_height = 300;
-
+    storage.sync_schema();
+    getAlarms();
     if (!glfwInit()) {
         std::cout << "GLFW failed!";
     }
