@@ -26,6 +26,8 @@ NOTIFYICONDATA nid = {};
 WNDPROC original_wndproc;
 
 //state
+
+
 struct Time {
     int id;
     time_point<local_t, system_clock::duration> time;
@@ -35,11 +37,13 @@ struct Reminder {
     int id;
     std::string time;
     std::string status = "pending";
+	std::string occasion;
 };
 auto storage = make_storage("data.db", make_table("reminders",
     make_column("id", &Reminder::id, primary_key().autoincrement()),
     make_column("time", &Reminder::time),
-    make_column("status", &Reminder::status, default_value("pending"))
+    make_column("status", &Reminder::status, default_value("pending")),
+    make_column("occasion", &Reminder::occasion)
 ));
 
 //retrive and merge pending alarms to reminders queue
@@ -59,6 +63,7 @@ void getAlarms() {
 std::atomic<bool> isNotificationShown(true);
 
 void CALLBACK TimerProc(HWND hwnd, UINT uMsg, UINT idEvent, DWORD dwTime) {
+	//std::cout << "TimerProc called at " << std::chrono::system_clock::to_time_t(system_clock::now()) << "\n";
     auto local_zone_time = zoned_time{ current_zone(), system_clock::now() };
     if (!times.empty()) {
         auto duration = duration_cast<seconds>(times.front().time - local_zone_time.get_local_time());
@@ -129,16 +134,35 @@ LRESULT CALLBACK MainWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPar
                 {
                     auto local_zone_time = zoned_time{ current_zone(), system_clock::now() };
                     auto t2 = local_zone_time.get_local_time() + 2min;
-                    Reminder reminder{ -1, std::vformat("{:%Y-%m-%d %H:%M:%S}", std::make_format_args(t2)) };
+                    Reminder reminder{ -1, std::vformat("{:%Y-%m-%d %H:%M:%S}", std::make_format_args(t2)), "pending", "Tea"};
                     auto reminder1Id = storage.insert(reminder);
+                    //we need to merge pending alarms to queue after every write
                     getAlarms();
                     std::cout << reminder1Id << std::endl;
                 }
 
                     break;
                 case IDI_LUNCH:
+                {
+                    auto local_zone_time = zoned_time{ current_zone(), system_clock::now() };
+					auto t2 = local_zone_time.get_local_time() + 2min; //wil be 2min for testing, change to 1h for actual use
+                    Reminder reminder{ -1, std::vformat("{:%Y-%m-%d %H:%M:%S}", std::make_format_args(t2)), "pending","Lunch"};
+                    auto reminder1Id = storage.insert(reminder);
+                    //we need to merge pending alarms to queue after every write
+                    getAlarms();
+                    std::cout << reminder1Id << std::endl;
+                }
                     break;
                 case IDI_DINNER:
+                {
+                    auto local_zone_time = zoned_time{ current_zone(), system_clock::now() };
+					auto t2 = local_zone_time.get_local_time() + 2min; //will be 2min for testing, change to 1h for actual use
+                    Reminder reminder{ -1, std::vformat("{:%Y-%m-%d %H:%M:%S}", std::make_format_args(t2)), "pending","Dinner"};
+                    auto reminder1Id = storage.insert(reminder);
+                    //we need to merge pending alarms to queue after every write
+                    getAlarms();
+                    std::cout << reminder1Id << std::endl;
+                }
                     break;
                 default:
                     break;
@@ -158,6 +182,66 @@ LRESULT CALLBACK MainWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPar
     return CallWindowProc(original_wndproc, hwnd, uMsg, wParam, lParam);
 }
 
+
+
+//notification window
+void showNotificationWindow() {
+    // Show the notification window
+    // You can use ImGui to render the content of the notification window here
+    {
+        ImGui::SetNextWindowPos(ImVec2(0, 0));
+
+        ImGui::Begin(
+            "Hello, world!",
+            NULL,
+            ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoDecoration
+        );
+
+        ImGui::SetWindowFontScale(1.3f);
+        // --- Title (optional with an icon) ---
+        ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 4); // extra top spacing
+        // You could load a small icon texture and display it with ImGui::Image
+        // For simplicity, we use a text emoji or a symbol
+        ImGui::Text("Notification");  // Requires FontAwesome or similar
+        // Without icon, just use:
+        // ImGui::Text("Notification Title");
+        ImGui::Separator();
+
+        // --- Message area ---
+        ImGui::TextWrapped("This is a Windows‑style notification with three buttons below. The message can be longer and will wrap.");
+
+        ImGui::Dummy(ImVec2(0, 8)); // spacing
+
+
+        float button_width = (ImGui::GetContentRegionAvail().x - ImGui::GetStyle().ItemSpacing.x * 2) / 3.0f;
+
+        // Button 1
+        if (ImGui::Button("Accept", ImVec2(button_width, 0)))
+        {
+            // action
+
+        }
+        ImGui::SameLine();
+
+        // Button 2
+        if (ImGui::Button("More info", ImVec2(button_width, 0)))
+        {
+            // action
+
+        }
+        ImGui::SameLine();
+
+        // Button 3
+        if (ImGui::Button("Dismiss", ImVec2(button_width, 0)))
+        {
+            // action
+
+        }
+
+        ImGui::End();
+    }
+
+}
 
 
 int main()
@@ -348,58 +432,7 @@ int main()
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
 
-        {
-            ImGui::SetNextWindowPos(ImVec2(0, 0));
-
-            ImGui::Begin(
-                "Hello, world!",
-                NULL,
-                ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoDecoration
-            );
-
-            ImGui::SetWindowFontScale(1.3f);
-            // --- Title (optional with an icon) ---
-            ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 4); // extra top spacing
-            // You could load a small icon texture and display it with ImGui::Image
-            // For simplicity, we use a text emoji or a symbol
-            ImGui::Text("Notification");  // Requires FontAwesome or similar
-            // Without icon, just use:
-            // ImGui::Text("Notification Title");
-            ImGui::Separator();
-
-            // --- Message area ---
-            ImGui::TextWrapped("This is a Windows‑style notification with three buttons below. The message can be longer and will wrap.");
-
-            ImGui::Dummy(ImVec2(0, 8)); // spacing
-
-
-            float button_width = (ImGui::GetContentRegionAvail().x - ImGui::GetStyle().ItemSpacing.x * 2) / 3.0f;
-
-            // Button 1
-            if (ImGui::Button("Accept", ImVec2(button_width, 0)))
-            {
-                // action
-
-            }
-            ImGui::SameLine();
-
-            // Button 2
-            if (ImGui::Button("More info", ImVec2(button_width, 0)))
-            {
-                // action
-
-            }
-            ImGui::SameLine();
-
-            // Button 3
-            if (ImGui::Button("Dismiss", ImVec2(button_width, 0)))
-            {
-                // action
-
-            }
-
-            ImGui::End();
-        }
+        showNotificationWindow();
 
         ImGui::Render();
         int ndisplay_w, ndisplay_h;
