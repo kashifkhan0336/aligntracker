@@ -67,5 +67,6 @@ target_include_directories(imgui PUBLIC ${ROOT}/backends)
 target_include_directories(glad PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
 add_executable(main main.cpp)
+target_precompile_headers(main PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/pch.h)
 target_link_libraries(main glfw glad imgui imgui_impl_glfw imgui_impl_opengl3 sqlite3_lib sqlite_orm::sqlite_orm)
 target_include_directories(main PRIVATE ${CMAKE_SOURCE_DIR}/vendor/sqlite/)

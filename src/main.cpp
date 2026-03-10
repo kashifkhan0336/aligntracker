@@ -1,25 +1,11 @@
-﻿#define GLFW_INCLUDE_NONE
-#include <iostream>
-#define GLAD_GL_IMPLEMENTATION
-#include <glad/gl.h>
-#include "imgui.h"
-#include "imgui_impl_glfw.h"
-#include "imgui_impl_opengl3.h"
-#include <GLFW/glfw3.h>
-#define GLFW_EXPOSE_NATIVE_WIN32    
-#include <GLFW/glfw3native.h>
-#include <Windows.h>
-#include <thread>
-#include <chrono>
-#include <sqlite_orm/sqlite_orm.h>
-#include <queue>
-
+﻿
 //namespaces
 using namespace std::chrono;
 using namespace std::chrono_literals;
 using namespace sqlite_orm;
 
 //Shell_notifyicon
+
 constexpr UINT WM_MY_NOTIFYICON = WM_APP + 1;
 const UINT MY_ICON_ID = 100;
 NOTIFYICONDATA nid = {};
@@ -29,6 +15,7 @@ WNDPROC original_wndproc;
 
 
 struct Time {
+
     int id;
     time_point<local_t, system_clock::duration> time;
 };
