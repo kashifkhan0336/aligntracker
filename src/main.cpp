@@ -13,9 +13,7 @@ WNDPROC original_wndproc;
 
 //state
 
-
 struct Time {
-
     int id;
     time_point<local_t, system_clock::duration> time;
 };
@@ -25,12 +23,16 @@ struct Reminder {
     std::string time;
     std::string status = "pending";
 	std::string occasion;
+	bool acknowledged = false;
 };
+Reminder currentNotification{};
 auto storage = make_storage("data.db", make_table("reminders",
     make_column("id", &Reminder::id, primary_key().autoincrement()),
     make_column("time", &Reminder::time),
     make_column("status", &Reminder::status, default_value("pending")),
-    make_column("occasion", &Reminder::occasion)
+    make_column("occasion", &Reminder::occasion),
+	make_column("acknowledged", &Reminder::acknowledged, default_value(false))
+
 ));
 
 //retrive and merge pending alarms to reminders queue
@@ -47,7 +49,7 @@ void getAlarms() {
         std::cout << local_time << std::endl;
     }
 }
-std::atomic<bool> isNotificationShown(true);
+std::atomic<bool> isNotificationShown(false);
 
 void CALLBACK TimerProc(HWND hwnd, UINT uMsg, UINT idEvent, DWORD dwTime) {
 	//std::cout << "TimerProc called at " << std::chrono::system_clock::to_time_t(system_clock::now()) << "\n";
@@ -55,8 +57,16 @@ void CALLBACK TimerProc(HWND hwnd, UINT uMsg, UINT idEvent, DWORD dwTime) {
     if (!times.empty()) {
         auto duration = duration_cast<seconds>(times.front().time - local_zone_time.get_local_time());
         std::cout << duration;
-        if (duration < 5s && duration < 3s) {
+        if (duration < 5s && duration > 3s) {
             std::cout << "Time for alarm" << "\n";
+			//currentNotificationText = "Time for " + storage.get<Reminder>(times.front().id).occasion;
+			//currentNotificationId = times.front().id;
+			currentNotification.id = times.front().id;
+			currentNotification.time = storage.get<Reminder>(times.front().id).time;
+			currentNotification.status = storage.get<Reminder>(times.front().id).status;
+			currentNotification.occasion = storage.get<Reminder>(times.front().id).occasion;
+			currentNotification.acknowledged = storage.get<Reminder>(times.front().id).acknowledged;
+            isNotificationShown = true;
             storage.update_all(set(c(&Reminder::status) = "done"), where(c(&Reminder::id) == times.front().id));
             times.pop();
         }
@@ -120,7 +130,7 @@ LRESULT CALLBACK MainWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPar
                 case IDI_TEA:
                 {
                     auto local_zone_time = zoned_time{ current_zone(), system_clock::now() };
-                    auto t2 = local_zone_time.get_local_time() + 2min;
+                    auto t2 = local_zone_time.get_local_time() + 20s;
                     Reminder reminder{ -1, std::vformat("{:%Y-%m-%d %H:%M:%S}", std::make_format_args(t2)), "pending", "Tea"};
                     auto reminder1Id = storage.insert(reminder);
                     //we need to merge pending alarms to queue after every write
@@ -132,7 +142,7 @@ LRESULT CALLBACK MainWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPar
                 case IDI_LUNCH:
                 {
                     auto local_zone_time = zoned_time{ current_zone(), system_clock::now() };
-					auto t2 = local_zone_time.get_local_time() + 2min; //wil be 2min for testing, change to 1h for actual use
+					auto t2 = local_zone_time.get_local_time() + 20s; //wil be 2min for testing, change to 1h for actual use
                     Reminder reminder{ -1, std::vformat("{:%Y-%m-%d %H:%M:%S}", std::make_format_args(t2)), "pending","Lunch"};
                     auto reminder1Id = storage.insert(reminder);
                     //we need to merge pending alarms to queue after every write
@@ -143,7 +153,7 @@ LRESULT CALLBACK MainWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPar
                 case IDI_DINNER:
                 {
                     auto local_zone_time = zoned_time{ current_zone(), system_clock::now() };
-					auto t2 = local_zone_time.get_local_time() + 2min; //will be 2min for testing, change to 1h for actual use
+					auto t2 = local_zone_time.get_local_time() + 20s; //will be 2min for testing, change to 1h for actual use
                     Reminder reminder{ -1, std::vformat("{:%Y-%m-%d %H:%M:%S}", std::make_format_args(t2)), "pending","Dinner"};
                     auto reminder1Id = storage.insert(reminder);
                     //we need to merge pending alarms to queue after every write
@@ -189,7 +199,7 @@ void showNotificationWindow() {
         ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 4); // extra top spacing
         // You could load a small icon texture and display it with ImGui::Image
         // For simplicity, we use a text emoji or a symbol
-        ImGui::Text("Notification");  // Requires FontAwesome or similar
+        ImGui::Text(currentNotification.occasion.c_str());  // Requires FontAwesome or similar
         // Without icon, just use:
         // ImGui::Text("Notification Title");
         ImGui::Separator();
@@ -203,8 +213,18 @@ void showNotificationWindow() {
         float button_width = (ImGui::GetContentRegionAvail().x - ImGui::GetStyle().ItemSpacing.x * 2) / 3.0f;
 
         // Button 1
-        if (ImGui::Button("Accept", ImVec2(button_width, 0)))
+        if (ImGui::Button("Snooze", ImVec2(button_width, 0)))
         {
+            auto local_zone_time = zoned_time{ current_zone(), system_clock::now() };
+            auto t2 = local_zone_time.get_local_time() + 20s;
+            storage.update_all(set(c(&Reminder::acknowledged) = true), where(c(&Reminder::id) == currentNotification.id));
+			storage.update_all(
+                set(
+                    c(&Reminder::time) = std::vformat("{:%Y-%m-%d %H:%M:%S}", std::make_format_args(t2))
+                , c(&Reminder::status) = "pending"), where(c(&Reminder::id) == currentNotification.id));
+			getAlarms();
+            isNotificationShown = false;
+
             // action
 
         }
@@ -222,7 +242,8 @@ void showNotificationWindow() {
         if (ImGui::Button("Dismiss", ImVec2(button_width, 0)))
         {
             // action
-
+			storage.update_all(set(c(&Reminder::acknowledged) = true), where(c(&Reminder::id) == currentNotification.id));
+			isNotificationShown = false;
         }
 
         ImGui::End();
@@ -257,9 +278,6 @@ int main()
 
     glfwGetMonitorWorkarea(glfwGetPrimaryMonitor(), NULL, NULL, &work_area_width, &work_area_height);
     std::cout << work_area_width << "," << work_area_height;
-
-
-
 
 
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
@@ -316,10 +334,6 @@ int main()
     ShowWindow(hwnd, SW_HIDE);
     ShowWindow(hwnd, SW_SHOWNOACTIVATE);
 
-
-
-
-
 #pragma endregion
 
     glfwMakeContextCurrent(main_window);
@@ -351,12 +365,12 @@ int main()
     ImGui::SetCurrentContext(notification_window_ctx);
     ImGui_ImplGlfw_InitForOpenGL(notification_window, true);
     ImGui_ImplOpenGL3_Init("#version 130");
-
-    while (!glfwWindowShouldClose(main_window) && !glfwWindowShouldClose(notification_window))
+\
+while (!glfwWindowShouldClose(main_window) && !glfwWindowShouldClose(notification_window))
     {
-
+		//glfwWaitEvents(); // Wait for events to avoid busy looping when windows are not active
         glfwMakeContextCurrent(main_window);
-
+		glfwSwapInterval(1); // Enable vsync
         ImGui::SetCurrentContext(main_window_ctx);
         if (glfwGetWindowAttrib(main_window, GLFW_ICONIFIED) != 0)
         {
@@ -407,19 +421,22 @@ int main()
 
         /* Make the second window's context current */
         glfwMakeContextCurrent(notification_window);
-        //if (isNotificationShown) {
 
-        //    glfwShowWindow(notification_window);
-        //}
-        //else {
-        //    glfwHideWindow(notification_window);
-        //}
+        if (isNotificationShown) {
+
+            glfwShowWindow(notification_window);
+        }
+        else {
+            glfwHideWindow(notification_window);
+        }
         ImGui::SetCurrentContext(notification_window_ctx);
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
 
+
         showNotificationWindow();
+
 
         ImGui::Render();
         int ndisplay_w, ndisplay_h;
