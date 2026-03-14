@@ -19,11 +19,16 @@ struct Time {
 };
 std::queue<Time> times;
 struct Reminder {
+private:
+    zoned_time<system_clock::duration,const time_zone*> local_time = zoned_time{ current_zone(), system_clock::now() };
+	time_point<local_t, system_clock::duration> current_time = local_time.get_local_time();
+public:
     int id;
     std::string time;
     std::string status = "pending";
 	std::string occasion;
 	bool acknowledged = false;
+    std::string created_on = std::vformat("{:%Y-%m-%d %H:%M:%S}", std::make_format_args(current_time));
 };
 Reminder currentNotification{};
 auto storage = make_storage("data.db", make_table("reminders",
@@ -31,8 +36,8 @@ auto storage = make_storage("data.db", make_table("reminders",
     make_column("time", &Reminder::time),
     make_column("status", &Reminder::status, default_value("pending")),
     make_column("occasion", &Reminder::occasion),
-	make_column("acknowledged", &Reminder::acknowledged, default_value(false))
-
+    make_column("acknowledged", &Reminder::acknowledged, default_value(false)),
+    make_column("created_on", &Reminder::created_on)
 ));
 
 //retrive and merge pending alarms to reminders queue
@@ -130,8 +135,13 @@ LRESULT CALLBACK MainWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPar
                 case IDI_TEA:
                 {
                     auto local_zone_time = zoned_time{ current_zone(), system_clock::now() };
-                    auto t2 = local_zone_time.get_local_time() + 20s;
-                    Reminder reminder{ -1, std::vformat("{:%Y-%m-%d %H:%M:%S}", std::make_format_args(t2)), "pending", "Tea"};
+                    auto t2 = local_zone_time.get_local_time() + 20s; //will be 2min for testing, change to 1h for actual use
+                    Reminder reminder;
+                    reminder.id = -1;
+                    reminder.time = std::vformat("{:%Y-%m-%d %H:%M:%S}", std::make_format_args(t2));
+                    reminder.status = "pending";
+                    reminder.occasion = "Tea";
+                    reminder.acknowledged = false;
                     auto reminder1Id = storage.insert(reminder);
                     //we need to merge pending alarms to queue after every write
                     getAlarms();
@@ -142,8 +152,13 @@ LRESULT CALLBACK MainWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPar
                 case IDI_LUNCH:
                 {
                     auto local_zone_time = zoned_time{ current_zone(), system_clock::now() };
-					auto t2 = local_zone_time.get_local_time() + 20s; //wil be 2min for testing, change to 1h for actual use
-                    Reminder reminder{ -1, std::vformat("{:%Y-%m-%d %H:%M:%S}", std::make_format_args(t2)), "pending","Lunch"};
+                    auto t2 = local_zone_time.get_local_time() + 20s; //will be 2min for testing, change to 1h for actual use
+                    Reminder reminder;
+                    reminder.id = -1;
+                    reminder.time = std::vformat("{:%Y-%m-%d %H:%M:%S}", std::make_format_args(t2));
+                    reminder.status = "pending";
+                    reminder.occasion = "Lunch";
+                    reminder.acknowledged = false;
                     auto reminder1Id = storage.insert(reminder);
                     //we need to merge pending alarms to queue after every write
                     getAlarms();
@@ -154,7 +169,13 @@ LRESULT CALLBACK MainWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPar
                 {
                     auto local_zone_time = zoned_time{ current_zone(), system_clock::now() };
 					auto t2 = local_zone_time.get_local_time() + 20s; //will be 2min for testing, change to 1h for actual use
-                    Reminder reminder{ -1, std::vformat("{:%Y-%m-%d %H:%M:%S}", std::make_format_args(t2)), "pending","Dinner"};
+                    Reminder reminder; 
+					reminder.id = -1;
+					reminder.time = std::vformat("{:%Y-%m-%d %H:%M:%S}", std::make_format_args(t2));
+					reminder.status = "pending";
+					reminder.occasion = "Dinner";
+					reminder.acknowledged = false;
+                    
                     auto reminder1Id = storage.insert(reminder);
                     //we need to merge pending alarms to queue after every write
                     getAlarms();
