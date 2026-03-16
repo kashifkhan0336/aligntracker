@@ -5,14 +5,13 @@ using namespace std::chrono_literals;
 using namespace sqlite_orm;
 
 //Shell_notifyicon
-
 constexpr UINT WM_MY_NOTIFYICON = WM_APP + 1;
 const UINT MY_ICON_ID = 100;
 NOTIFYICONDATA nid = {};
 WNDPROC original_wndproc;
 
 //state
-
+unsigned int currentAlignerNumber = 5;
 struct Time {
     int id;
     time_point<local_t, system_clock::duration> time;
@@ -29,16 +28,33 @@ public:
 	std::string occasion;
 	bool acknowledged = false;
     std::string created_on = std::vformat("{:%Y-%m-%d %H:%M:%S}", std::make_format_args(current_time));
+	int aligner_id;
 };
 Reminder currentNotification{};
-auto storage = make_storage("data.db", make_table("reminders",
+
+struct Aligner {
+    int id;
+	unsigned int aligner_number;
+    
+};
+
+auto aligner_table = make_table("aligners",
+	make_column("id", &Aligner::id, primary_key().autoincrement()),
+    make_column("aligner_number", &Aligner::aligner_number, unique())
+);
+
+auto reminder_table = make_table("reminders",
     make_column("id", &Reminder::id, primary_key().autoincrement()),
     make_column("time", &Reminder::time),
     make_column("status", &Reminder::status, default_value("pending")),
     make_column("occasion", &Reminder::occasion),
     make_column("acknowledged", &Reminder::acknowledged, default_value(false)),
-    make_column("created_on", &Reminder::created_on)
-));
+    make_column("created_on", &Reminder::created_on),
+	make_column("aligner_id", &Reminder::aligner_id),
+   foreign_key(&Reminder::aligner_id).references(&Aligner::id)
+);
+
+auto storage = make_storage("data.db", reminder_table,aligner_table);
 
 //retrive and merge pending alarms to reminders queue
 void getAlarms() {
@@ -130,6 +146,13 @@ LRESULT CALLBACK MainWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPar
                 AppendMenu(hMenu, MF_STRING, IDI_DINNER, "Dinner");
                 UINT item = TrackPopupMenu(hMenu, TPM_RETURNCMD | TPM_NONOTIFY | TPM_LEFTBUTTON, pt.x, pt.y, 0, hwnd, NULL); //this will block
                 std::cout << "item -> " << item << std::endl;
+				auto aligner_id = storage.get_all<Aligner>(where(c(&Aligner::aligner_number) == currentAlignerNumber))[0].id;
+				auto rows = storage.select(columns(&Reminder::occasion, &Aligner::aligner_number), join<Reminder>(on(c(&Reminder::aligner_id)==aligner_id)));
+                for (auto& row : rows) {
+                    std::cout << std::get<0>(row) << std::endl;
+                }
+
+				std::cout << aligner_id << std::endl;
                 switch (item)
                 {
                 case IDI_TEA:
@@ -142,6 +165,7 @@ LRESULT CALLBACK MainWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPar
                     reminder.status = "pending";
                     reminder.occasion = "Tea";
                     reminder.acknowledged = false;
+					reminder.aligner_id = aligner_id;
                     auto reminder1Id = storage.insert(reminder);
                     //we need to merge pending alarms to queue after every write
                     getAlarms();
@@ -159,6 +183,7 @@ LRESULT CALLBACK MainWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPar
                     reminder.status = "pending";
                     reminder.occasion = "Lunch";
                     reminder.acknowledged = false;
+                    reminder.aligner_id = aligner_id;
                     auto reminder1Id = storage.insert(reminder);
                     //we need to merge pending alarms to queue after every write
                     getAlarms();
@@ -175,7 +200,7 @@ LRESULT CALLBACK MainWindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPar
 					reminder.status = "pending";
 					reminder.occasion = "Dinner";
 					reminder.acknowledged = false;
-                    
+                    reminder.aligner_id = aligner_id;
                     auto reminder1Id = storage.insert(reminder);
                     //we need to merge pending alarms to queue after every write
                     getAlarms();
@@ -281,8 +306,19 @@ int main()
     int notification_window_width = 600;
     int notification_window_height = 300;
     storage.sync_schema();
+	Aligner aligner;
+	aligner.id = -1;
+	aligner.aligner_number = currentAlignerNumber;
+    try {
+        storage.insert(aligner);
+    }catch (const std::exception& e) {
+		std::cout << "Error inserting aligner: " << e.what() << std::endl;
+        std::cout << "Aligner already exists, skipping insert." << std::endl;
+	}
+
     getAlarms();
     if (!glfwInit()) {
+
         std::cout << "GLFW failed!";
     }
 
